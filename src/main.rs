@@ -6,6 +6,7 @@ use std::io;
 use std::io::prelude::*;
 use std::process::{self, exit};
 
+mod ast;
 mod error;
 mod scanner;
 mod token;
