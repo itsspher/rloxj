@@ -1,7 +1,6 @@
-use std::any::type_name;
-
-use crate::ast::Literal;
 use crate::error::LoxError;
+use crate::expr::Literal;
+use crate::expr::LiteralKind;
 use crate::token::Token;
 use crate::token_type::TokenType;
 
@@ -39,6 +38,7 @@ impl Scanner {
             String::from(""),
             None,
             self.line,
+            self.current.try_into().unwrap(),
         ));
         match lexical_errors.len() {
             0 => Ok(&self.tokens),
@@ -158,11 +158,13 @@ impl Scanner {
         }
         self.add_token(
             TokenType::Number,
-            Some(Literal::Num(
-                self.source[self.start..self.current]
-                    .parse::<f64>()
-                    .unwrap(),
-            )),
+            Some(Literal {
+                value: LiteralKind::Num(
+                    self.source[self.start..self.current]
+                        .parse::<f64>()
+                        .unwrap(),
+                ),
+            }),
         );
     }
 
@@ -191,7 +193,12 @@ impl Scanner {
 
         self.advance();
         let value: String = self.source[self.start + 1..self.current - 1].to_string();
-        self.add_token(TokenType::String, Some(Literal::String(value)));
+        self.add_token(
+            TokenType::String,
+            Some(Literal {
+                value: LiteralKind::String(value),
+            }),
+        );
 
         Ok(())
     }
@@ -238,7 +245,12 @@ impl Scanner {
 
     pub fn add_token(&mut self, token_type: TokenType, literal: Option<Literal>) {
         let text: String = self.source[self.start..self.current].to_string();
-        self.tokens
-            .push(Token::new(token_type, text, literal, self.line))
+        self.tokens.push(Token::new(
+            token_type,
+            text,
+            literal,
+            self.line,
+            self.current.try_into().unwrap(),
+        ))
     }
 }

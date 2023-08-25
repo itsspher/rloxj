@@ -6,8 +6,10 @@ use std::io;
 use std::io::prelude::*;
 use std::process::{self, exit};
 
-mod ast;
 mod error;
+mod expr;
+mod lox_object;
+mod parser;
 mod scanner;
 mod token;
 mod token_type;
@@ -24,6 +26,7 @@ fn run_file(path: &str) -> io::Result<()> {
     match run(buffer) {
         error::RuntimeResult::Safe => {}
         error::RuntimeResult::LexicalError => exit(65),
+        error::RuntimeResult::ParserError => exit(65),
     };
     Ok(())
 }
@@ -37,6 +40,7 @@ fn run_prompt() -> Result<()> {
                 match run(line) {
                     error::RuntimeResult::Safe => {}
                     error::RuntimeResult::LexicalError => {}
+                    error::RuntimeResult::ParserError => {}
                 };
             }
             Err(ReadlineError::Interrupted) => {
@@ -65,7 +69,14 @@ fn run(source: String) -> error::RuntimeResult {
             return error::RuntimeResult::LexicalError;
         }
     };
-    tokens.iter().for_each(|token| println!("{:?}", token));
+    let mut parser: parser::Parser = parser::Parser::new(tokens);
+    let _expr = match parser.parse() {
+        Ok(o) => println!("{}", o.display()),
+        Err(e) => {
+            e.report();
+            return error::RuntimeResult::ParserError;
+        }
+    };
     error::RuntimeResult::Safe
 }
 

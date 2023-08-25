@@ -7,6 +7,8 @@ pub struct LoxError {
 pub enum RuntimeResult {
     Safe,
     LexicalError,
+    ParserError,
+    InterpreterError,
 }
 
 impl LoxError {
