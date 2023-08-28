@@ -40,21 +40,10 @@ impl Token {
     }
 
     pub fn position(&self) -> i32 {
-        self.line
+        self.position
     }
 
     pub fn lexeme(&self) -> String {
         self.lexeme.clone()
-    }
-
-    pub fn to_string(self) -> String {
-        match self.literal {
-            Some(x) => {
-                format!("{:?} {:?} {:?}", self.token_type, self.lexeme, x)
-            }
-            None => {
-                format!("{:?} {:?}", self.token_type, self.lexeme)
-            }
-        }
     }
 }

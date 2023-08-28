@@ -10,12 +10,14 @@ pub trait Expr {
     fn eval(&self) -> Result<LoxObject, LoxError>;
 }
 
+#[derive(Debug)]
 pub enum Kind {
     Literal,
     Unary,
     Binary,
     Grouping,
     NoOp,
+    Variable,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +40,7 @@ impl Expr for Literal {
     }
 
     fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
         match &self.value {
             LiteralKind::String(s) => s.clone(),
             LiteralKind::Num(n) => n.to_string(),
@@ -48,9 +51,9 @@ impl Expr for Literal {
     }
 
     fn eval(&self) -> Result<LoxObject, LoxError> {
-        match self.value {
-            LiteralKind::String(s) => Ok(LoxObject::String(s)),
-            LiteralKind::Num(n) => Ok(LoxObject::Number(n)),
+        match &self.value {
+            LiteralKind::String(s) => Ok(LoxObject::String(s.clone())),
+            LiteralKind::Num(n) => Ok(LoxObject::Number(n.clone())),
             LiteralKind::True => Ok(LoxObject::Bool(true)),
             LiteralKind::False => Ok(LoxObject::Bool(false)),
             LiteralKind::Nil => Ok(LoxObject::Nil),
@@ -69,6 +72,7 @@ impl Expr for Unary {
     }
 
     fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
         let mut result: Vec<&str> = Vec::new();
         result.push("(");
         let binding = &self.operator.lexeme();
@@ -82,7 +86,7 @@ impl Expr for Unary {
         let expr = self.expr.eval()?;
         match self.operator.token_type() {
             TokenType::Minus => {
-                is_num_operand(self.operator, expr)?;
+                is_num_operand(&self.operator, &expr)?;
                 match expr {
                     LoxObject::Number(n) => Ok(LoxObject::Number(-n)),
                     _ => unreachable!(),
@@ -114,6 +118,7 @@ impl Expr for Binary {
     }
 
     fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
         let mut result: Vec<&str> = Vec::new();
         result.push("(");
         let binding = &self.left.display();
@@ -146,14 +151,42 @@ impl Expr for Binary {
                 (LoxObject::String(a), LoxObject::String(b)) => Ok(LoxObject::String(a + &b)),
                 _ => throw_num_operands_error(&self.operator),
             },
+            TokenType::Greater => match (left, right) {
+                (LoxObject::Number(a), LoxObject::Number(b)) => Ok(LoxObject::Bool(a > b)),
+                _ => throw_num_operands_error(&self.operator),
+            },
+            TokenType::GreaterEqual => match (left, right) {
+                (LoxObject::Number(a), LoxObject::Number(b)) => Ok(LoxObject::Bool(a >= b)),
+                _ => throw_num_operands_error(&self.operator),
+            },
+            TokenType::Less => match (left, right) {
+                (LoxObject::Number(a), LoxObject::Number(b)) => Ok(LoxObject::Bool(a < b)),
+                _ => throw_num_operands_error(&self.operator),
+            },
+            TokenType::LessEqual => match (left, right) {
+                (LoxObject::Number(a), LoxObject::Number(b)) => Ok(LoxObject::Bool(a <= b)),
+                _ => throw_num_operands_error(&self.operator),
+            },
+            TokenType::EqualEqual => Ok(LoxObject::Bool(is_equal(&left, &right))),
+            TokenType::BangEqual => Ok(LoxObject::Bool(!is_equal(&left, &right))),
             _ => unreachable!(),
         }
     }
 }
 
-fn is_num_operand(operator: Token, expr: LoxObject) -> Result<(), LoxError> {
+// assumes rust's == operator has the behaviour we want
+// this may not be the case though...
+fn is_equal(left: &LoxObject, right: &LoxObject) -> bool {
+    match (left, right) {
+        (LoxObject::Nil, LoxObject::Nil) => true,
+        (LoxObject::Nil, _) => false,
+        (_, _) => left == right,
+    }
+}
+
+fn is_num_operand(operator: &Token, expr: &LoxObject) -> Result<(), LoxError> {
     match expr {
-        LoxObject::Number(n) => Ok(()),
+        LoxObject::Number(_) => Ok(()),
         _ => Err(LoxError::error(
             operator.line(),
             "Operand must be number.".to_string(),
@@ -180,6 +213,7 @@ impl Expr for Grouping {
     }
 
     fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
         let mut result: Vec<&str> = Vec::new();
         result.push("(");
         result.push("group ");
@@ -201,7 +235,27 @@ impl Expr for NoOp {
     }
 
     fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
         "".to_string()
+    }
+
+    fn eval(&self) -> Result<LoxObject, LoxError> {
+        Ok(LoxObject::Nil)
+    }
+}
+
+pub struct Variable {
+    pub name: Token,
+}
+
+impl Expr for Variable {
+    fn kind(&self) -> Kind {
+        Kind::Variable
+    }
+
+    fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
+        self.name.lexeme()
     }
 
     fn eval(&self) -> Result<LoxObject, LoxError> {

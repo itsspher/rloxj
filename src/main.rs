@@ -6,11 +6,14 @@ use std::io;
 use std::io::prelude::*;
 use std::process::{self, exit};
 
+mod environment;
 mod error;
 mod expr;
+mod interpreter;
 mod lox_object;
 mod parser;
 mod scanner;
+mod stmt;
 mod token;
 mod token_type;
 
@@ -27,6 +30,7 @@ fn run_file(path: &str) -> io::Result<()> {
         error::RuntimeResult::Safe => {}
         error::RuntimeResult::LexicalError => exit(65),
         error::RuntimeResult::ParserError => exit(65),
+        error::RuntimeResult::InterpreterError => exit(65),
     };
     Ok(())
 }
@@ -41,6 +45,7 @@ fn run_prompt() -> Result<()> {
                     error::RuntimeResult::Safe => {}
                     error::RuntimeResult::LexicalError => {}
                     error::RuntimeResult::ParserError => {}
+                    error::RuntimeResult::InterpreterError => {}
                 };
             }
             Err(ReadlineError::Interrupted) => {
@@ -70,13 +75,19 @@ fn run(source: String) -> error::RuntimeResult {
         }
     };
     let mut parser: parser::Parser = parser::Parser::new(tokens);
-    let _expr = match parser.parse() {
-        Ok(o) => println!("{}", o.display()),
+    parser.parse();
+    if parser.errors.len() > 0 {
+        parser.errors.iter().for_each(|error| error.report());
+        return error::RuntimeResult::ParserError;
+    }
+    let mut interpreter: interpreter::Interpreter = interpreter::Interpreter::new();
+    match interpreter.interpret(parser.statements) {
+        Ok(_) => {}
         Err(e) => {
             e.report();
-            return error::RuntimeResult::ParserError;
+            return error::RuntimeResult::InterpreterError;
         }
-    };
+    }
     error::RuntimeResult::Safe
 }
 
