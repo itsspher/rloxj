@@ -15,6 +15,7 @@ pub enum Kind {
     Expression,
     Print,
     Var,
+    Block,
 }
 
 pub struct Expression {
@@ -57,6 +58,23 @@ impl Stmt for Var {
         let value = self.initializer.eval(Rc::clone(&env))?;
         env.borrow_mut()
             .define(self.name.lexeme().clone(), value.clone());
+        Ok(LoxObject::None)
+    }
+}
+
+pub struct Block {
+    pub statements: Vec<Rc<dyn Stmt>>,
+}
+
+impl Stmt for Block {
+    fn kind(&self) -> Kind {
+        Kind::Block
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let scoped_env = Rc::new(RefCell::new(Environment::new_with_enclosing(env)));
+        for stmt in &self.statements {
+            stmt.eval(Rc::clone(&scoped_env))?;
+        }
         Ok(LoxObject::None)
     }
 }

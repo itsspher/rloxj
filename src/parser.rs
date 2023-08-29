@@ -32,7 +32,7 @@ impl Parser<'_> {
         }
     }
 
-    pub fn declaration(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+    fn declaration(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
         let result;
         if self.is_of(&[TokenType::Var]) {
             result = self.var_declaration();
@@ -69,9 +69,12 @@ impl Parser<'_> {
         Ok(Rc::new(stmt::Var { name, initializer }))
     }
 
-    pub fn statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+    fn statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
         if self.is_of(&[TokenType::Print]) {
             return self.print_statement();
+        }
+        if self.is_of(&[TokenType::LeftBrace]) {
+            return self.block();
         }
         self.expression_statement()
     }
@@ -92,6 +95,18 @@ impl Parser<'_> {
             "Expected ';' after value.".to_string(),
         )?;
         Ok(Rc::new(stmt::Expression { expr }))
+    }
+
+    fn block(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        let mut statements: Vec<Rc<dyn stmt::Stmt>> = Vec::new();
+        while !self.check(&TokenType::RightBrace) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+        self.consume(
+            TokenType::RightBrace,
+            "Expected '}' after block.".to_string(),
+        )?;
+        Ok(Rc::new(stmt::Block { statements }))
     }
 
     fn expression(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
@@ -240,10 +255,10 @@ impl Parser<'_> {
                 name: self.previous().clone(),
             }));
         }
-
+        let message = format!("Expected expression at token {}.", self.peek().lexeme());
         Err(LoxError::error(
             self.peek().line(),
-            "Expected expression.".to_string(),
+            message,
             self.peek().position().try_into().unwrap(),
         ))
     }
