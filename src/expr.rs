@@ -1,13 +1,15 @@
+use crate::environment::Environment;
 use crate::error::LoxError;
 use crate::lox_object::LoxObject;
 use crate::token::Token;
 use crate::token_type::TokenType;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub trait Expr {
     fn kind(&self) -> Kind;
     fn display(&self) -> String;
-    fn eval(&self) -> Result<LoxObject, LoxError>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError>;
 }
 
 #[derive(Debug)]
@@ -17,7 +19,8 @@ pub enum Kind {
     Binary,
     Grouping,
     NoOp,
-    Variable,
+    Variable(Token),
+    Assign,
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +53,7 @@ impl Expr for Literal {
         }
     }
 
-    fn eval(&self) -> Result<LoxObject, LoxError> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         match &self.value {
             LiteralKind::String(s) => Ok(LoxObject::String(s.clone())),
             LiteralKind::Num(n) => Ok(LoxObject::Number(n.clone())),
@@ -82,8 +85,8 @@ impl Expr for Unary {
         result.push(")");
         result.into_iter().collect::<String>()
     }
-    fn eval(&self) -> Result<LoxObject, LoxError> {
-        let expr = self.expr.eval()?;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let expr = self.expr.eval(env)?;
         match self.operator.token_type() {
             TokenType::Minus => {
                 is_num_operand(&self.operator, &expr)?;
@@ -130,9 +133,9 @@ impl Expr for Binary {
         result.push(")");
         result.into_iter().collect::<String>()
     }
-    fn eval(&self) -> Result<LoxObject, LoxError> {
-        let left = self.left.eval()?;
-        let right = self.right.eval()?;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let left = self.left.eval(Rc::clone(&env))?;
+        let right = self.right.eval(Rc::clone(&env))?;
         match self.operator.token_type() {
             TokenType::Minus => match (left, right) {
                 (LoxObject::Number(a), LoxObject::Number(b)) => Ok(LoxObject::Number(a - b)),
@@ -222,8 +225,8 @@ impl Expr for Grouping {
         result.push(")");
         result.into_iter().collect::<String>()
     }
-    fn eval(&self) -> Result<LoxObject, LoxError> {
-        self.expr.eval()
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        self.expr.eval(env)
     }
 }
 
@@ -239,7 +242,7 @@ impl Expr for NoOp {
         "".to_string()
     }
 
-    fn eval(&self) -> Result<LoxObject, LoxError> {
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         Ok(LoxObject::Nil)
     }
 }
@@ -250,7 +253,7 @@ pub struct Variable {
 
 impl Expr for Variable {
     fn kind(&self) -> Kind {
-        Kind::Variable
+        Kind::Variable(self.name.clone())
     }
 
     fn display(&self) -> String {
@@ -258,7 +261,27 @@ impl Expr for Variable {
         self.name.lexeme()
     }
 
-    fn eval(&self) -> Result<LoxObject, LoxError> {
-        Ok(LoxObject::Nil)
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        env.borrow_mut().get(&self.name)
+    }
+}
+
+pub struct Assign {
+    pub name: Token,
+    pub value: Rc<dyn Expr>,
+}
+
+impl Expr for Assign {
+    fn kind(&self) -> Kind {
+        Kind::Assign
+    }
+    fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
+        self.name.lexeme()
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let value = self.value.eval(Rc::clone(&env))?;
+        env.borrow_mut().assign(&self.name, value.clone())?;
+        return Ok(value);
     }
 }

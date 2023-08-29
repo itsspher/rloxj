@@ -3,11 +3,12 @@ use crate::error::LoxError;
 use crate::expr;
 use crate::lox_object::LoxObject;
 use crate::token::Token;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 pub trait Stmt {
     fn kind(&self) -> Kind;
-    fn eval(&self, env: Rc<Environment>) -> Result<LoxObject, LoxError>;
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError>;
 }
 
 pub enum Kind {
@@ -24,8 +25,8 @@ impl Stmt for Expression {
     fn kind(&self) -> Kind {
         Kind::Expression
     }
-    fn eval(&self, env: Rc<Environment>) -> Result<LoxObject, LoxError> {
-        self.expr.eval()
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        self.expr.eval(env)
     }
 }
 
@@ -37,8 +38,8 @@ impl Stmt for Print {
     fn kind(&self) -> Kind {
         Kind::Print
     }
-    fn eval(&self, env: Rc<Environment>) -> Result<LoxObject, LoxError> {
-        println!("{}", self.expr.eval()?.to_string());
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        println!("{}", self.expr.eval(env)?.to_string());
         Ok(LoxObject::None)
     }
 }
@@ -52,9 +53,10 @@ impl Stmt for Var {
     fn kind(&self) -> Kind {
         Kind::Var
     }
-    fn eval(&self, env: Rc<Environment>) -> Result<LoxObject, LoxError> {
-        let value = self.initializer.eval()?;
-        env.define(self.name.lexeme(), value);
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let value = self.initializer.eval(Rc::clone(&env))?;
+        env.borrow_mut()
+            .define(self.name.lexeme().clone(), value.clone());
         Ok(LoxObject::None)
     }
 }

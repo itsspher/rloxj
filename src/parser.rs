@@ -94,8 +94,28 @@ impl Parser<'_> {
         Ok(Rc::new(stmt::Expression { expr }))
     }
 
-    pub fn expression(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
-        self.equality()
+    fn expression(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        let expr = self.equality()?;
+        if self.is_of(&[TokenType::Equal]) {
+            let equals = self.previous().clone();
+            let value = self.assignment()?;
+
+            match expr.kind() {
+                expr::Kind::Variable(name) => return Ok(Rc::new(expr::Assign { name, value })),
+                _ => {
+                    return Err(LoxError::error(
+                        equals.line(),
+                        "Invalid assignment target.".to_string(),
+                        equals.position().try_into().unwrap(),
+                    ))
+                }
+            };
+        }
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
