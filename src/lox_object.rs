@@ -5,6 +5,7 @@ pub enum LoxObject {
     Bool(bool),
     Number(f64),
     String(String),
+    Function(Callable),
 }
 
 impl LoxObject {
@@ -15,6 +16,7 @@ impl LoxObject {
             LoxObject::Bool(b) => println!("{}", b),
             LoxObject::Number(n) => println!("{}", n),
             LoxObject::String(s) => println!("{}", s),
+            LoxObject::Function(_) => println!("Function entered"),
         }
     }
     pub fn to_string(&self) -> String {
@@ -24,6 +26,18 @@ impl LoxObject {
             LoxObject::Bool(b) => b.to_string(),
             LoxObject::Number(n) => n.to_string(),
             LoxObject::String(s) => s.clone(),
+            LoxObject::Function(_) => "Function callable".to_string(),
         }
+    }
+}
+
+#[derive(PartialEq, Clone)]
+pub struct Callable {
+    pub arity: usize,
+}
+
+impl Callable {
+    pub fn call(arguments: Vec<LoxObject>) -> LoxObject {
+        LoxObject::None //TODO
     }
 }

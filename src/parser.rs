@@ -76,9 +76,122 @@ impl Parser<'_> {
         if self.is_of(&[TokenType::LeftBrace]) {
             return self.block();
         }
+        if self.is_of(&[TokenType::If]) {
+            return self.if_statement();
+        }
+        if self.is_of(&[TokenType::While]) {
+            return self.while_statement();
+        }
+        if self.is_of(&[TokenType::For]) {
+            return self.for_statement();
+        }
         self.expression_statement()
     }
 
+    fn for_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        self.consume(
+            TokenType::LeftParen,
+            "Expected '(' after 'for'.".to_string(),
+        )?;
+        let mut initializer_null = false;
+        let initializer: Rc<dyn stmt::Stmt>;
+        if self.is_of(&[TokenType::Semicolon]) {
+            initializer_null = true;
+            initializer = Rc::new(stmt::Expression {
+                expr: Rc::new(expr::Literal {
+                    value: expr::LiteralKind::Nil,
+                }),
+            });
+        } else if self.is_of(&[TokenType::Var]) {
+            initializer = self.var_declaration()?;
+        } else {
+            initializer = self.expression_statement()?;
+        }
+
+        let condition = match !self.check(&TokenType::Semicolon) {
+            true => self.expression()?,
+            false => Rc::new(expr::Literal {
+                value: expr::LiteralKind::True,
+            }),
+        };
+        self.consume(
+            TokenType::Semicolon,
+            "Expected ';' after loop condition.".to_string(),
+        )?;
+
+        let mut increment_null = false;
+        let increment = match !self.check(&TokenType::RightParen) {
+            true => self.expression()?,
+            false => {
+                increment_null = true;
+                Rc::new(expr::Literal {
+                    value: expr::LiteralKind::Nil,
+                })
+            }
+        };
+        self.consume(
+            TokenType::RightParen,
+            "Expected ')' after 'for' clause.".to_string(),
+        )?;
+
+        let mut body = self.statement()?;
+
+        if !increment_null {
+            body = Rc::new(stmt::Block {
+                statements: vec![body, Rc::new(stmt::Expression { expr: increment })],
+            })
+        }
+
+        body = Rc::new(stmt::While { condition, body });
+
+        if !initializer_null {
+            body = Rc::new(stmt::Block {
+                statements: vec![initializer, body],
+            })
+        }
+
+        Ok(body)
+    }
+
+    fn while_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        self.consume(
+            TokenType::LeftParen,
+            "Expected '(' after 'while'".to_string(),
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenType::RightParen,
+            "Expected ')' after condition".to_string(),
+        )?;
+        let body = self.statement()?;
+
+        Ok(Rc::new(stmt::While { condition, body }))
+    }
+
+    fn if_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        self.consume(TokenType::LeftParen, "Expected '(' after 'if'.".to_string())?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenType::RightParen,
+            "Expected ')' after condition.".to_string(),
+        )?;
+
+        let then_branch = self.statement()?;
+        let mut else_branch: Rc<dyn stmt::Stmt> = Rc::new(stmt::Expression {
+            expr: Rc::new(expr::Literal {
+                value: expr::LiteralKind::Nil,
+            }),
+        });
+        if self.is_of(&[TokenType::Else]) {
+            else_branch = self.statement()?;
+        };
+
+        Ok(Rc::new(stmt::If {
+            condition,
+            then_branch,
+            else_branch,
+        }))
+    }
     fn print_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
         let value = self.expression()?;
         self.consume(
@@ -114,7 +227,7 @@ impl Parser<'_> {
     }
 
     fn assignment(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if self.is_of(&[TokenType::Equal]) {
             let equals = self.previous().clone();
             let value = self.assignment()?;
@@ -129,6 +242,34 @@ impl Parser<'_> {
                     ))
                 }
             };
+        }
+        Ok(expr)
+    }
+
+    fn or(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        let mut expr = self.and()?;
+        while self.is_of(&[TokenType::Or]) {
+            let operator = self.previous().clone();
+            let right = self.and()?;
+            expr = Rc::new(expr::Logical {
+                left: expr,
+                operator,
+                right,
+            });
+        }
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        let mut expr = self.equality()?;
+        while self.is_of(&[TokenType::And]) {
+            let operator = self.previous().clone();
+            let right = self.equality()?;
+            expr = Rc::new(expr::Logical {
+                left: expr,
+                operator,
+                right,
+            });
         }
         Ok(expr)
     }
@@ -211,7 +352,50 @@ impl Parser<'_> {
                 expr: right,
             }));
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.is_of(&[TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Rc<dyn expr::Expr>) -> Result<Rc<dyn expr::Expr>, LoxError> {
+        let mut arguments: Vec<Rc<dyn expr::Expr>> = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(LoxError::error(
+                        self.peek().line(),
+                        "Can't have more than 255 arguments.".to_string(),
+                        self.peek().position().try_into().unwrap(),
+                    ));
+                }
+                arguments.push(self.expression()?);
+                if self.is_of(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(
+            TokenType::RightParen,
+            "Expected ')' after arguments.".to_string(),
+        )?;
+
+        Ok(Rc::new(expr::Call {
+            callee,
+            paren: paren.clone(),
+            arguments,
+        }))
     }
 
     fn primary(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {

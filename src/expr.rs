@@ -1,6 +1,7 @@
 use crate::environment::Environment;
 use crate::error::LoxError;
 use crate::lox_object::LoxObject;
+use crate::stmt::is_truthy;
 use crate::token::Token;
 use crate::token_type::TokenType;
 use std::cell::RefCell;
@@ -21,6 +22,8 @@ pub enum Kind {
     NoOp,
     Variable(Token),
     Assign,
+    Logical,
+    Call,
 }
 
 #[derive(Debug, Clone)]
@@ -283,5 +286,82 @@ impl Expr for Assign {
         let value = self.value.eval(Rc::clone(&env))?;
         env.borrow_mut().assign(&self.name, value.clone())?;
         return Ok(value);
+    }
+}
+
+pub struct Logical {
+    pub left: Rc<dyn Expr>,
+    pub operator: Token,
+    pub right: Rc<dyn Expr>,
+}
+
+impl Expr for Logical {
+    fn kind(&self) -> Kind {
+        Kind::Logical
+    }
+    fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
+        self.operator.lexeme()
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let left = self.left.eval(Rc::clone(&env))?;
+
+        if self.operator.token_type() == TokenType::Or {
+            if is_truthy(left.clone()) {
+                return Ok(left);
+            }
+        } else {
+            if !is_truthy(left.clone()) {
+                return Ok(left);
+            }
+        }
+
+        self.right.eval(Rc::clone(&env))
+    }
+}
+
+pub struct Call {
+    pub callee: Rc<dyn Expr>,
+    pub paren: Token,
+    pub arguments: Vec<Rc<dyn Expr>>,
+}
+
+impl Expr for Call {
+    fn kind(&self) -> Kind {
+        Kind::Call
+    }
+    fn display(&self) -> String {
+        println!("enetered display at {:?}", self.kind());
+        self.paren.lexeme()
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        let callee = self.callee.eval(Rc::clone(&env))?;
+        let mut arguments: Vec<LoxObject> = Vec::new();
+        for argument in &self.arguments {
+            arguments.push(argument.eval(Rc::clone(&env))?);
+        }
+
+        let function = match callee {
+            LoxObject::Function(c) => {
+                if arguments.len() != c.arity {
+                    return Err(LoxError::error(
+                        self.paren.line(),
+                        "Can only call functions and classes".to_string(),
+                        self.paren.position().try_into().unwrap(),
+                    ));
+                } else {
+                    c
+                }
+            }
+            _ => {
+                return Err(LoxError::error(
+                    self.paren.line(),
+                    "Can only call functions and classes".to_string(),
+                    self.paren.position().try_into().unwrap(),
+                ))
+            }
+        };
+
+        Ok(LoxObject::None)
     }
 }

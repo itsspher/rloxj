@@ -16,6 +16,9 @@ pub enum Kind {
     Print,
     Var,
     Block,
+    If,
+    While,
+    For,
 }
 
 pub struct Expression {
@@ -76,5 +79,61 @@ impl Stmt for Block {
             stmt.eval(Rc::clone(&scoped_env))?;
         }
         Ok(LoxObject::None)
+    }
+}
+
+pub struct If {
+    pub condition: Rc<dyn expr::Expr>,
+    pub then_branch: Rc<dyn Stmt>,
+    pub else_branch: Rc<dyn Stmt>,
+}
+
+impl Stmt for If {
+    fn kind(&self) -> Kind {
+        Kind::If
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        match is_truthy(self.condition.eval(Rc::clone(&env))?) {
+            true => self.then_branch.eval(Rc::clone(&env))?,
+            false => self.else_branch.eval(Rc::clone(&env))?,
+        };
+        Ok(LoxObject::None)
+    }
+}
+
+pub struct While {
+    pub condition: Rc<dyn expr::Expr>,
+    pub body: Rc<dyn Stmt>,
+}
+
+impl Stmt for While {
+    fn kind(&self) -> Kind {
+        Kind::While
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        while is_truthy(self.condition.eval(Rc::clone(&env))?) {
+            self.body.eval(Rc::clone(&env))?;
+        }
+
+        Ok(LoxObject::None)
+    }
+}
+
+pub struct For {}
+
+impl Stmt for For {
+    fn kind(&self) -> Kind {
+        Kind::For
+    }
+    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+        Ok(LoxObject::None)
+    }
+}
+
+pub fn is_truthy(object: LoxObject) -> bool {
+    match object {
+        LoxObject::None | LoxObject::Nil => false,
+        LoxObject::Bool(b) => b,
+        _ => true,
     }
 }
