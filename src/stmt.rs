@@ -15,10 +15,10 @@ pub enum Kind {
     Expression,
     Print,
     Var,
-    Block,
+    Block(Vec<Rc<dyn Stmt>>),
     If,
     While,
-    For,
+    Function,
 }
 
 pub struct Expression {
@@ -71,7 +71,7 @@ pub struct Block {
 
 impl Stmt for Block {
     fn kind(&self) -> Kind {
-        Kind::Block
+        Kind::Block(self.statements.clone())
     }
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         let scoped_env = Rc::new(RefCell::new(Environment::new_with_enclosing(env)));
@@ -119,14 +119,21 @@ impl Stmt for While {
     }
 }
 
-pub struct For {}
+pub struct Function {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Block,
+}
 
-impl Stmt for For {
+impl Stmt for Function {
     fn kind(&self) -> Kind {
-        Kind::For
+        Kind::Function
     }
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
-        Ok(LoxObject::None)
+        let function = LoxObject::Function(Rc::new(crate::lox_object::Function {
+            arity: self.params.len(),
+            declaration: Rc::new(self),
+        }));
     }
 }
 

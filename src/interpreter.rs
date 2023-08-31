@@ -10,9 +10,8 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {
-            environment: Rc::new(RefCell::new(Environment::new())),
-        }
+        let env = Rc::new(RefCell::new(Environment::new()));
+        Interpreter { environment: env }
     }
     pub fn interpret(&mut self, statements: Vec<Rc<dyn Stmt>>) -> Result<(), LoxError> {
         for stmt in statements {

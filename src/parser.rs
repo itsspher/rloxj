@@ -34,7 +34,9 @@ impl Parser<'_> {
 
     fn declaration(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
         let result;
-        if self.is_of(&[TokenType::Var]) {
+        if self.is_of(&[TokenType::Fun]) {
+            result = self.function("function".to_string());
+        } else if self.is_of(&[TokenType::Var]) {
             result = self.var_declaration();
         } else {
             result = self.statement();
@@ -47,6 +49,55 @@ impl Parser<'_> {
             }
         }
         result
+    }
+
+    fn function(&mut self, kind: String) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        let message = format!("Expected {} name.", kind);
+        let name = self.consume(TokenType::Identifier, message)?.clone();
+
+        let message = format!("Expected '(' after {} name.", kind);
+        self.consume(TokenType::LeftParen, message)?;
+        let mut parameters: Vec<Token> = Vec::new();
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 255 {
+                    return Err(LoxError::error(
+                        self.peek().line(),
+                        "Can't have more than 255 parameters.".to_string(),
+                        self.peek().position(),
+                    ));
+                }
+                parameters.push(
+                    self.consume(TokenType::Identifier, "Expected parameter name".to_string())?
+                        .clone(),
+                );
+                if !self.is_of(&[TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume(
+            TokenType::RightParen,
+            "Expected ')' after parameters.".to_string(),
+        )?;
+
+        let message = format!("Expected '{{' before {} body.", kind);
+        self.consume(TokenType::LeftBrace, message)?;
+        let body = match self.block()?.kind() {
+            stmt::Kind::Block(s) => stmt::Block { statements: s },
+            _ => {
+                return Err(LoxError::error(
+                    self.peek().line(),
+                    "Body of function somehow not a block??".to_string(),
+                    self.peek().position(),
+                ));
+            }
+        };
+        Ok(Rc::new(stmt::Function {
+            name,
+            params: parameters,
+            body,
+        }))
     }
 
     fn var_declaration(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
@@ -335,7 +386,7 @@ impl Parser<'_> {
             let right = self.unary()?;
             expr = Rc::new(expr::Binary {
                 left: expr,
-                operator: operator,
+                operator,
                 right,
             })
         }

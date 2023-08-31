@@ -1,5 +1,5 @@
 pub struct LoxError {
-    line: i32,
+    line: usize,
     message: String,
     position: usize,
 }
@@ -12,7 +12,7 @@ pub enum RuntimeResult {
 }
 
 impl LoxError {
-    pub fn error(line: i32, message: String, position: usize) -> LoxError {
+    pub fn error(line: usize, message: String, position: usize) -> LoxError {
         LoxError {
             line,
             message,

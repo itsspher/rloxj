@@ -26,7 +26,7 @@ pub enum Kind {
     Call,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LiteralKind {
     String(String),
     Num(f64),
@@ -35,7 +35,7 @@ pub enum LiteralKind {
     Nil,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Literal {
     pub value: LiteralKind,
 }
@@ -346,7 +346,7 @@ impl Expr for Call {
                 if arguments.len() != c.arity {
                     return Err(LoxError::error(
                         self.paren.line(),
-                        "Can only call functions and classes".to_string(),
+                        "Parameters and arguments mismatch in number.".to_string(),
                         self.paren.position().try_into().unwrap(),
                     ));
                 } else {
@@ -362,6 +362,6 @@ impl Expr for Call {
             }
         };
 
-        Ok(LoxObject::None)
+        Ok(function.call(Rc::clone(&env), arguments)?)
     }
 }

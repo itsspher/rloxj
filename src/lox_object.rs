@@ -1,3 +1,11 @@
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{
+    environment::Environment,
+    error::LoxError,
+    stmt::{self, Stmt},
+};
+
 #[derive(PartialEq, Clone)]
 pub enum LoxObject {
     None,
@@ -5,7 +13,7 @@ pub enum LoxObject {
     Bool(bool),
     Number(f64),
     String(String),
-    Function(Callable),
+    Function(Rc<Function>),
 }
 
 impl LoxObject {
@@ -31,13 +39,31 @@ impl LoxObject {
     }
 }
 
-#[derive(PartialEq, Clone)]
-pub struct Callable {
+pub struct Function {
     pub arity: usize,
+    pub declaration: Rc<&stmt::Function>,
 }
 
-impl Callable {
-    pub fn call(arguments: Vec<LoxObject>) -> LoxObject {
-        LoxObject::None //TODO
+impl Function {
+    pub fn call(
+        &self,
+        env: Rc<RefCell<Environment>>,
+        args: Vec<LoxObject>,
+    ) -> Result<LoxObject, LoxError> {
+        let mut scoped_env = Environment::new_with_enclosing(env);
+        for (pos, _val) in args.clone().into_iter().enumerate() {
+            scoped_env.define(self.declaration.params[pos].lexeme(), args[pos].clone());
+        }
+        self.declaration
+            .body
+            .eval(Rc::clone(&Rc::new(RefCell::new(scoped_env))))
+    }
+}
+
+impl PartialEq for Function {
+    fn eq(&self, other: &Self) -> bool {
+        let arity_match = self.arity == other.arity;
+        let declaration_match = Rc::ptr_eq(&self.declaration, &other.declaration);
+        arity_match && declaration_match
     }
 }

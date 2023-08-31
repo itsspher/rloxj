@@ -9,7 +9,7 @@ pub struct Scanner {
     tokens: Vec<Token>,
     start: usize,
     current: usize,
-    line: i32,
+    line: usize,
 }
 
 impl Scanner {

@@ -1,13 +1,13 @@
 use crate::expr::Literal;
 use crate::token_type::TokenType;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     token_type: TokenType,
     lexeme: String,
     literal: Option<Literal>,
-    line: i32,
-    position: i32,
+    line: usize,
+    position: usize,
 }
 
 impl Token {
@@ -15,8 +15,8 @@ impl Token {
         token_type: TokenType,
         lexeme: String,
         literal: Option<Literal>,
-        line: i32,
-        position: i32,
+        line: usize,
+        position: usize,
     ) -> Token {
         Token {
             token_type,
@@ -35,11 +35,11 @@ impl Token {
         self.literal.clone().unwrap()
     }
 
-    pub fn line(&self) -> i32 {
+    pub fn line(&self) -> usize {
         self.line
     }
 
-    pub fn position(&self) -> i32 {
+    pub fn position(&self) -> usize {
         self.position
     }
 
