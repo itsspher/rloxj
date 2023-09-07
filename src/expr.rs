@@ -1,6 +1,7 @@
 use crate::environment::Environment;
 use crate::error::LoxError;
 use crate::lox_object::LoxObject;
+use crate::resolver::Resolver;
 use crate::stmt::is_truthy;
 use crate::token::Token;
 use crate::token_type::TokenType;
@@ -11,6 +12,7 @@ pub trait Expr {
     fn kind(&self) -> Kind;
     fn display(&self) -> String;
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError>;
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError>;
 }
 
 #[derive(Debug)]
@@ -56,7 +58,7 @@ impl Expr for Literal {
         }
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+    fn eval(&self, _env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         match &self.value {
             LiteralKind::String(s) => Ok(LoxObject::String(s.clone())),
             LiteralKind::Num(n) => Ok(LoxObject::Number(n.clone())),
@@ -64,6 +66,9 @@ impl Expr for Literal {
             LiteralKind::False => Ok(LoxObject::Bool(false)),
             LiteralKind::Nil => Ok(LoxObject::Nil),
         }
+    }
+    fn resolve(self: Rc<Self>, _resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Ok(())
     }
 }
 
@@ -109,6 +114,10 @@ impl Expr for Unary {
             },
             _ => unreachable!(),
         }
+    }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.expr).resolve(Rc::clone(&resolver))?;
+        Ok(())
     }
 }
 
@@ -178,6 +187,11 @@ impl Expr for Binary {
             _ => unreachable!(),
         }
     }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.left).resolve(Rc::clone(&resolver))?;
+        Rc::clone(&self.right).resolve(Rc::clone(&resolver))?;
+        Ok(())
+    }
 }
 
 // assumes rust's == operator has the behaviour we want
@@ -231,6 +245,10 @@ impl Expr for Grouping {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         self.expr.eval(env)
     }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.expr).resolve(Rc::clone(&resolver))?;
+        Ok(())
+    }
 }
 
 pub struct NoOp {}
@@ -245,8 +263,12 @@ impl Expr for NoOp {
         "".to_string()
     }
 
-    fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
+    fn eval(&self, _env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         Ok(LoxObject::Nil)
+    }
+
+    fn resolve(self: Rc<Self>, _resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Ok(())
     }
 }
 
@@ -267,6 +289,28 @@ impl Expr for Variable {
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError> {
         env.borrow_mut().get(&self.name)
     }
+
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        if !resolver.borrow_mut().scopes.is_empty()
+            && resolver
+                .borrow_mut()
+                .scopes
+                .last()
+                .expect("This shouldn't happen since prior condition ensures existence.")
+                .get(&self.name.lexeme())
+                == Some(&false)
+        {
+            return Err(LoxError::error(
+                self.name.line(),
+                "Can't read local variable in it's own initializer".to_string(),
+                self.name.position(),
+            ));
+        }
+        resolver
+            .borrow_mut()
+            .resolve_local(Rc::clone(&self) as Rc<dyn Expr>, self.name.clone());
+        Ok(())
+    }
 }
 
 pub struct Assign {
@@ -286,6 +330,13 @@ impl Expr for Assign {
         let value = self.value.eval(Rc::clone(&env))?;
         env.borrow_mut().assign(&self.name, value.clone())?;
         return Ok(value);
+    }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.value).resolve(Rc::clone(&resolver))?;
+        resolver
+            .borrow_mut()
+            .resolve_local(Rc::clone(&self) as Rc<dyn Expr>, self.name.clone());
+        Ok(())
     }
 }
 
@@ -317,6 +368,11 @@ impl Expr for Logical {
         }
 
         self.right.eval(Rc::clone(&env))
+    }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.left).resolve(Rc::clone(&resolver))?;
+        Rc::clone(&self.right).resolve(Rc::clone(&resolver))?;
+        Ok(())
     }
 }
 
@@ -362,6 +418,13 @@ impl Expr for Call {
             }
         };
 
-        Ok(function.call(Rc::clone(&env), arguments)?)
+        Ok(function.call(arguments)?)
+    }
+    fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError> {
+        Rc::clone(&self.callee).resolve(Rc::clone(&resolver))?;
+        for argument in &self.arguments {
+            Rc::clone(&argument).resolve(Rc::clone(&resolver))?;
+        }
+        Ok(())
     }
 }

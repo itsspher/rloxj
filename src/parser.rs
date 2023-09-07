@@ -84,7 +84,7 @@ impl Parser<'_> {
         let message = format!("Expected '{{' before {} body.", kind);
         self.consume(TokenType::LeftBrace, message)?;
         let body = match self.block()?.kind() {
-            stmt::Kind::Block(s) => stmt::Block { statements: s },
+            stmt::Kind::Block(s) => s,
             _ => {
                 return Err(LoxError::error(
                     self.peek().line(),
@@ -136,7 +136,23 @@ impl Parser<'_> {
         if self.is_of(&[TokenType::For]) {
             return self.for_statement();
         }
+        if self.is_of(&[TokenType::Return]) {
+            return self.return_statement();
+        }
         self.expression_statement()
+    }
+
+    fn return_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
+        let keyword = self.previous().clone();
+        let mut value: Option<Rc<dyn expr::Expr>> = None;
+        if !self.check(&TokenType::Semicolon) {
+            value = Some(self.expression()?);
+        }
+        self.consume(
+            TokenType::Semicolon,
+            "Expected ';' after return value.".to_string(),
+        )?;
+        Ok(Rc::new(stmt::Return { keyword, value }))
     }
 
     fn for_statement(&mut self) -> Result<Rc<dyn stmt::Stmt>, LoxError> {
@@ -190,6 +206,7 @@ impl Parser<'_> {
         if !increment_null {
             body = Rc::new(stmt::Block {
                 statements: vec![body, Rc::new(stmt::Expression { expr: increment })],
+                function_block: false,
             })
         }
 
@@ -198,6 +215,7 @@ impl Parser<'_> {
         if !initializer_null {
             body = Rc::new(stmt::Block {
                 statements: vec![initializer, body],
+                function_block: false,
             })
         }
 
@@ -270,7 +288,10 @@ impl Parser<'_> {
             TokenType::RightBrace,
             "Expected '}' after block.".to_string(),
         )?;
-        Ok(Rc::new(stmt::Block { statements }))
+        Ok(Rc::new(stmt::Block {
+            statements,
+            function_block: false,
+        }))
     }
 
     fn expression(&mut self) -> Result<Rc<dyn expr::Expr>, LoxError> {
@@ -431,7 +452,7 @@ impl Parser<'_> {
                     ));
                 }
                 arguments.push(self.expression()?);
-                if self.is_of(&[TokenType::Comma]) {
+                if !self.is_of(&[TokenType::Comma]) {
                     break;
                 }
             }
