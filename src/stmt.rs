@@ -7,11 +7,12 @@ use crate::token::Token;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub trait Stmt {
+pub trait Stmt: downcast_rs::Downcast {
     fn kind(&self) -> Kind;
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError>;
     fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError>;
 }
+downcast_rs::impl_downcast!(Stmt);
 
 pub enum Kind {
     Expression,

@@ -8,12 +8,13 @@ use crate::token_type::TokenType;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub trait Expr {
+pub trait Expr: downcast_rs::Downcast {
     fn kind(&self) -> Kind;
     fn display(&self) -> String;
     fn eval(&self, env: Rc<RefCell<Environment>>) -> Result<LoxObject, LoxError>;
     fn resolve(self: Rc<Self>, resolver: Rc<RefCell<&mut Resolver>>) -> Result<(), LoxError>;
 }
+downcast_rs::impl_downcast!(Expr);
 
 #[derive(Debug)]
 pub enum Kind {
@@ -196,7 +197,7 @@ impl Expr for Binary {
 
 // assumes rust's == operator has the behaviour we want
 // this may not be the case though...
-fn is_equal(left: &LoxObject, right: &LoxObject) -> bool {
+pub fn is_equal(left: &LoxObject, right: &LoxObject) -> bool {
     match (left, right) {
         (LoxObject::Nil, LoxObject::Nil) => true,
         (LoxObject::Nil, _) => false,
@@ -204,7 +205,7 @@ fn is_equal(left: &LoxObject, right: &LoxObject) -> bool {
     }
 }
 
-fn is_num_operand(operator: &Token, expr: &LoxObject) -> Result<(), LoxError> {
+pub fn is_num_operand(operator: &Token, expr: &LoxObject) -> Result<(), LoxError> {
     match expr {
         LoxObject::Number(_) => Ok(()),
         _ => Err(LoxError::error(
@@ -215,7 +216,7 @@ fn is_num_operand(operator: &Token, expr: &LoxObject) -> Result<(), LoxError> {
     }
 }
 
-fn throw_num_operands_error(operator: &Token) -> Result<LoxObject, LoxError> {
+pub fn throw_num_operands_error(operator: &Token) -> Result<LoxObject, LoxError> {
     Err(LoxError::error(
         operator.line(),
         "Operands must both be numbers.".to_string(),
